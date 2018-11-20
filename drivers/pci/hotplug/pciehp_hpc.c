@@ -566,9 +566,13 @@ static irqreturn_t pciehp_isr(int irq, void *dev_id)
 	u8 present;
 	bool link;
 
-	/* Interrupts cannot originate from a controller that's asleep */
-	if (pdev->current_state == PCI_D3cold)
-		return IRQ_NONE;
+    /*
+     * Interrupts only occur in D3hot or shallower and only if enabled
+     * in the Slot Control register (PCIe r4.0, sec 6.7.3.4).
+     */
+	if (pdev->current_state == PCI_D3cold ||
+	    (!(ctrl->slot_ctrl & PCI_EXP_SLTCTL_HPIE) && !pciehp_poll_mode))
+        return IRQ_NONE;
 
 	pcie_capability_read_word(pdev, PCI_EXP_SLTSTA, &status);
 	if (status == (u16) ~0) {
@@ -906,3 +910,14 @@ void pciehp_release_ctrl(struct controller *ctrl)
 	pcie_cleanup_slot(ctrl);
 	kfree(ctrl);
 }
+
+void pcie_enable_interrupt(struct controller *ctrl)
+{
+    pcie_write_cmd(ctrl, PCI_EXP_SLTCTL_HPIE, PCI_EXP_SLTCTL_HPIE);
+}
+
+void pcie_disable_interrupt(struct controller *ctrl)
+{
+    pcie_write_cmd(ctrl, 0, PCI_EXP_SLTCTL_HPIE);
+}
+
